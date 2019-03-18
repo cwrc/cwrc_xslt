@@ -134,13 +134,18 @@ function cwrc_xslt_object_datastream_form_submit(array $form, array &$form_state
   }
   else {
     $datastream->setContentFromString($output_xml);
+    $dsid = strtoupper($output_datastream_id);
     if (!isset($object[$output_datastream_id])) {
       // Create the datastream base on the xslt datastream output.
       $datastream->label = $output_datastream_id;
       $datastream->mimetype = $xslt->datastream_mime_type;
+      $message = t('The @dsid was successfully added!', array('@dsid' => $dsid));
+    }
+    else {
+      $message = t('The @dsid was successfully updated!', array('@dsid' => $dsid));
     }
     $object->ingestDatastream($datastream);
-    drupal_set_message(t('The datastream was successuffly added!'));
+    drupal_set_message($message);
     $form_state['redirect'] = "islandora/object/{$object->id}/manage/datastreams";
   }
   $xslt_processor->clearParameters();
