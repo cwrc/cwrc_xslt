@@ -1,0 +1,365 @@
+<?php
+
+/**
+ * @file
+ * Implementing cwrc xslt functionalities.
+ */
+
+define('CWRC_XSLT_DB_TABLE', 'cwrc_xslt');
+
+/**
+ * Implements hook_menu().
+ */
+function cwrc_xslt_menu() {
+  $items['admin/islandora/xslt'] = array(
+    'title' => 'CWRC XSLT',
+    'description' => 'XSLT configurations forms.',
+    'page callback' => 'system_admin_menu_block_page',
+    'access arguments' => array('administer site configuration'),
+    'file' => 'system.admin.inc',
+    'file path' => drupal_get_path('module', 'system'),
+  );
+
+  $module_path = drupal_get_path('module', 'cwrc_xslt');
+  $form_file = 'includes/form.inc';
+  $items['admin/islandora/xslt/files'] = array(
+    'title' => 'XSLT Files',
+    'description' => 'Uploaded XSLT files list',
+    'page callback' => 'cwrc_xslt_files_list',
+    'access arguments' => array('run batch migration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['admin/islandora/xslt/files/list'] = array(
+    'title' => 'XSLTs',
+    'description' => 'Create, manage and edit XSLTs.',
+    'page callback' => 'cwrc_xslt_files_list',
+    'access arguments' => array('run batch migration'),
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => 0,
+  );
+  $items['admin/islandora/xslt/files/enabled-associations'] = array(
+    'title' => 'Enabled associations',
+    'description' => 'List of xslt enabled associations with cModel',
+    'page callback' => 'cwrc_xslt_enabled_associations',
+    'access arguments' => array('run batch migration'),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 1,
+  );
+  $items['admin/islandora/xslt/files/upload'] = array(
+    'title' => 'Import new',
+    'description' => 'Upload new XSLT file.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cwrc_xslt_upload_form'),
+    'access arguments' => array('run batch migration'),
+    'file' => $form_file,
+    'file path' => $module_path,
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 2,
+  );
+  $items['admin/islandora/xslt/files/%/delete'] = array(
+    'title' => 'XSLT Delete',
+    'title callback' => 'cwrc_xslt_delete_form_title_callback',
+    'title arguments' => array(4),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cwrc_xslt_delete_form', 4),
+    'access arguments' => array('run batch migration'),
+    'file' => $form_file,
+    'file path' => $module_path,
+  );
+  $items['admin/islandora/xslt/files/%/associate'] = array(
+    'title' => 'XSLT and Cmodel Associate',
+    'title callback' => 'cwrc_xslt_cmodel_association_form_title_callback',
+    'title arguments' => array(4),
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cwrc_xslt_cmodel_association_form', 4),
+    'access arguments' => array('run batch migration'),
+    'file' => $form_file,
+    'file path' => $module_path,
+  );
+
+  $items['islandora/object/%islandora_object/manage/datastreams/add-using-xslt'] = array(
+    'title' => 'Add/Change a datastream using XSLT',
+    'file' => 'includes/object.form.inc',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('cwrc_xslt_object_datastream_form', 2),
+    'type' => MENU_LOCAL_ACTION,
+    'access callback' => 'islandora_object_access_callback',
+    'access arguments' => array(ISLANDORA_ADD_DS, 2),
+  );
+  $items['islandora/autocomplete/datastream-id'] = array(
+    'title' => 'Datastream ID autocomplete',
+    'description' => 'Autocomplete a Fedora Datastream ID.',
+    'file' => 'includes/datastream.autocomplete.inc',
+    'page callback' => 'cwrc_xslt_datastream_autocomplete',
+    'page arguments' => array(3),
+    'access arguments' => array('run batch migrations'),
+  );
+
+  return $items;
+}
+
+/**
+ * Uploaded XSLT files list callback.
+ */
+function cwrc_xslt_files_list() {
+  $empty = t('<p>No XSLTS have been imported.</p>');
+
+  $query = db_select(CWRC_XSLT_DB_TABLE, 'xslt')
+    ->extend('PagerDefault')
+    ->extend('TableSort');
+  $query->leftJoin('file_managed', 'file', 'xslt.fid = file.fid');
+  $query->fields('xslt');
+  $query->addField('file', 'filename');
+  $query->addField('file', 'uri');
+
+  $headers = array(
+    array('data' => t('Title'), 'field' => 'file.filename'),
+    array('data' => t('XSLT Version'), 'field' => 'xslt.version'),
+    array('data' => t('Operations')),
+  );
+  $rows = array();
+
+  $entries = $query
+    ->limit(50)
+    ->orderByHeader($headers)
+    ->execute();
+
+  foreach ($entries as $entry) {
+    $rows[] = array(
+      'data' => array(
+        'title' => $entry->filename,
+        'version' => $entry->version,
+        'operations' => _cwrc_xslt_constructs_list_operations_links($entry),
+      ),
+    );
+  }
+
+  return theme('table', array(
+    'header' => $headers,
+    'rows' => $rows,
+    'empty' => $empty,
+  ));
+}
+
+/**
+ * XSLT Enabled associations page callback.
+ */
+function cwrc_xslt_enabled_associations() {
+  $build = array();
+  $xslts = cwrc_xslt_entry_load();
+
+  foreach ($xslts as $xslt) {
+    $file = file_load($xslt->fid);
+    $associations = !empty($xslt->cmodel_associations) ? unserialize($xslt->cmodel_associations) : array();
+    $array_key = 'xslt_' . $xslt->xslt_id;
+    $class = drupal_clean_css_identifier('xslt-associations-' . $array_key);
+    $build[$array_key] = array(
+      '#type' => 'container',
+      '#attributes' => array(
+        'class' => array('xslt-enabled-associations', $class, 'clearfix'),
+      ),
+      'heading' => array(
+        '#type' => 'html_tag',
+        '#tag' => 'h2',
+        '#value' => $file->filename,
+      ),
+      'items' => array(
+        '#markup' => t('<p>No cModel association have been added yet!</p>'),
+      ),
+    );
+    if ($associations) {
+      $build[$array_key]['items']['#markup'] = theme('item_list', array(
+        'items' => array_values($associations),
+        'title' => NULL,
+        'type' => 'ul',
+        'attributes' => array('class' => 'clearfix'),
+      ));
+    }
+  }
+
+  // In case no xslt has been added yet.
+  if (!$build) {
+    $build['placeholder'] = [
+      '#markup' => t('<p>No xslt has been added yet.</p>'),
+    ];
+  }
+  else {
+    $module_name = 'cwrc_xslt';
+    $path = drupal_get_path('module', $module_name);
+    $build['#attached']['css'] = array($path . '/css/style.css');
+  }
+
+  return $build;
+}
+
+/**
+ * Gets datastreams by supported mime type.
+ *
+ * @return array
+ *   The datastreams.
+ */
+function cwrc_xslt_get_datastreams_by_mime_type() {
+  $dsids = &drupal_static(__FUNCTION__);
+  $cache_id = 'cwrc_xslt_datastream_ids';
+
+  if (!isset($dsids)) {
+    if ($cache = cache_get($cache_id)) {
+      $dsids = $cache->data;
+    }
+    else {
+      module_load_include('inc', 'islandora', 'includes/utilities');
+      $supported_mime_types = array('text/xml', 'application/xml');
+      $results = islandora_get_content_models();
+
+      foreach ($results as $cmodel) {
+        $cmodel = islandora_object_load($cmodel['pid']);
+        $cmodel_datastreams = islandora_get_datastreams_requirements_from_content_model($cmodel);
+        if ($cmodel_datastreams) {
+          foreach ($cmodel_datastreams as $datastream) {
+            if ($datastream['id'] === 'RELS-EXT' || count($datastream['mime']) !== 1) {
+              continue;
+            }
+
+            $mime_type = $datastream['mime'][0];
+            if (empty($datastream['optional']) && in_array($mime_type, $supported_mime_types, TRUE)) {
+              $dsids[$datastream['id']] = array(
+                'id' => $datastream['id'],
+                'mime_type' => $mime_type,
+              );
+            }
+          }
+        }
+      }
+
+      // Saving this in the cache system.
+      cache_set($cache_id, $dsids);
+    }
+  }
+
+  return $dsids;
+}
+
+/**
+ * Save an entry in the database.
+ *
+ * @param array $entry
+ *   An array containing all the fields of the database record.
+ *
+ * @return \DatabaseStatementInterface|int|null
+ *   The db entry feedback.
+ */
+function cwrc_xslt_entry_insert(array $entry) {
+  $return_value = NULL;
+  try {
+    $return_value = db_insert(CWRC_XSLT_DB_TABLE)
+      ->fields($entry)
+      ->execute();
+  }
+  catch (Exception $e) {
+    drupal_set_message(t('db_insert failed. Message = %message, query= %query',
+      array('%message' => $e->getMessage(), '%query' => $e->query_string)), 'error');
+  }
+  return $return_value;
+}
+
+/**
+ * Update an entry in the database.
+ *
+ * @param array $entry
+ *   An array containing all the fields of the item to be updated.
+ *
+ * @return \DatabaseStatementInterface|int
+ *   the number of rows updated.
+ */
+function cwrc_xslt_entry_update(array $entry) {
+  $count = 0;
+  try {
+    $count = db_update(CWRC_XSLT_DB_TABLE)
+      ->fields($entry)
+      ->condition('xslt_id', $entry['xslt_id'])
+      ->execute();
+  }
+  catch (Exception $e) {
+    drupal_set_message(t('db_update failed. Message = %message, query= %query',
+      array('%message' => $e->getMessage(), '%query' => $e->query_string)), 'error');
+  }
+  return $count;
+}
+
+/**
+ * Delete an entry from the database.
+ *
+ * @param array $entry
+ *   An array containing at least the xslt identifier 'xslt_id' element of the
+ *   entry to delete.
+ */
+function cwrc_xslt_entry_delete(array $entry) {
+  db_delete(CWRC_XSLT_DB_TABLE)
+    ->condition('xslt_id', $entry['xslt_id'])
+    ->execute();
+}
+
+/**
+ * Read from the database using a filter array.
+ *
+ * @param array $entry
+ *   An array containing all the fields used to search the entries in the table.
+ *
+ * @return object
+ *   An object containing the loaded entries if found.
+ */
+function cwrc_xslt_entry_load(array $entry = array()) {
+  $select = db_select(CWRC_XSLT_DB_TABLE, 'xslts');
+  $select->fields('xslts');
+
+  // Add each field and value as a condition to this query.
+  foreach ($entry as $field => $value) {
+    $select->condition($field, $value);
+  }
+
+  // Return the result in object format.
+  return $select->execute()->fetchAll();
+}
+
+/**
+ * Constructs xslt operations links.
+ */
+function _cwrc_xslt_constructs_list_operations_links($entry) {
+  // Download operation.
+  $name = $entry->filename;
+  $url = file_create_url($entry->uri);
+  $operations = l(t('Download'), $url, array(
+    'attributes' => array(
+      'target' => '_blank',
+      'title' => t('Download @name, open a new window', array('@name' => $name)),
+      'download' => '',
+    ),
+  ));
+
+  // Remove operation.
+  $xslt_id = $entry->xslt_id;
+  $url = '/admin/islandora/xslt/files/' . $xslt_id . '/delete';
+  $operations .= '&nbsp;&nbsp;&nbsp;';
+  $operations .= l(t('Remove'), $url);
+
+  // Associate operation.
+  $url = '/admin/islandora/xslt/files/' . $xslt_id . '/associate';
+  $operations .= '&nbsp;&nbsp;&nbsp;';
+  $operations .= l(t('Associate'), $url);
+
+  return $operations;
+}
+
+/**
+ * Gets Cmodel options.
+ */
+function _cwrc_xslt_get_cmodel_options() {
+  module_load_include('inc', 'islandora', 'includes/content_model.autocomplete');
+  $content_models = islandora_get_content_model_names();
+  $cmodel_pids = array();
+  foreach ($content_models as $model => $label) {
+    $cmodel_pids[$model] = $label;
+  }
+
+  return $cmodel_pids;
+}

@@ -1,0 +1,5 @@
+name = CWRC XSLT
+description = A drupal module to add or update existing islandora object using an XSLT.
+package = Islandora
+version = 7.x-dev
+core = 7.x
