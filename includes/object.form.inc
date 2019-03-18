@@ -63,6 +63,12 @@ function cwrc_xslt_object_datastream_form(array $form, array &$form_state, \Isla
     $form['select_xslt']['#required'] = TRUE;
     $form['select_xslt']['#options'] = _cwrc_xslt_get_options($source_datastream, $form_state);
   }
+  else {
+    // Adding locks information - only adding this on foam load when no ajax
+    // callback.
+    form_load_include($form_state, 'inc', 'islandora_object_lock', 'includes/form_handlers');
+    islandora_object_lock_acquire_during_alter($form, $form_state, $object, NULL, 'manage/datastreams/add-using-xslt');
+  }
 
   $form['actions'] = array(
     '#type' => 'actions',
@@ -77,9 +83,6 @@ function cwrc_xslt_object_datastream_form(array $form, array &$form_state, \Isla
     ),
   );
 
-  // Adding locks information.
-  form_load_include($form_state, 'inc', 'islandora_object_lock', 'includes/form_handlers');
-  islandora_object_lock_acquire_during_alter($form, $form_state, $object, NULL, 'manage/datastreams/add-using-xslt');
   return $form;
 }
 
