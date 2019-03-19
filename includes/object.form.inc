@@ -70,6 +70,10 @@ function cwrc_xslt_object_datastream_form(array $form, array &$form_state, \Isla
     form_load_include($form_state, 'inc', 'islandora_object_lock', 'includes/form_handlers');
     islandora_object_lock_acquire_during_alter($form, $form_state, $object, NULL, 'manage/datastreams/add-using-xslt');
     $form_state['object_lock_acquired'] = TRUE;
+
+    if (islandora_object_lock_access_lock($object, 'lock')) {
+      $form['source_datastream']['#attributes']['disabled'] = 'disabled';
+    }
   }
 
   $form['actions'] = array(
@@ -136,15 +140,14 @@ function cwrc_xslt_object_datastream_form_submit(array $form, array &$form_state
   }
   else {
     $datastream->setContentFromString($output_xml);
-    $dsid = strtoupper($output_datastream_id);
     if (!isset($object[$output_datastream_id])) {
       // Create the datastream base on the xslt datastream output.
       $datastream->label = $output_datastream_id;
       $datastream->mimetype = $xslt->datastream_mime_type;
-      $message = t('The @dsid was successfully added!', array('@dsid' => $dsid));
+      $message = t('The datastream was successfully added!');
     }
     else {
-      $message = t('The @dsid was successfully updated!', array('@dsid' => $dsid));
+      $message = t('The datastream was successfully updated!');
     }
     $object->ingestDatastream($datastream);
     drupal_set_message($message);
