@@ -9,8 +9,6 @@
  * Islandora add datastream with XSLT form callback.
  */
 function cwrc_xslt_object_datastream_form(array $form, array &$form_state, \IslandoraFedoraObject $object) {
-  $cmodels = $object->models;
-  $source_datastream_options = array();
   $values = !empty($form_state['values']) ? $form_state['values'] : array();
   $form['#islandora_object'] = $object;
 
@@ -18,26 +16,24 @@ function cwrc_xslt_object_datastream_form(array $form, array &$form_state, \Isla
     '#markup' => t('<h2>Transform</h2>'),
   );
 
-  if ($cmodels) {
-    module_load_include('inc', 'islandora', 'includes/utilities');
-    $supported_mime_types = ['text/xml', 'application/xml'];
-    foreach ($cmodels as $cmodel_pid) {
-      $cmodel = islandora_object_load($cmodel_pid);
-      $cmodel_datastreams = islandora_get_datastreams_requirements_from_content_model($cmodel);
-      if ($cmodel_datastreams) {
-        foreach ($cmodel_datastreams as $datastream) {
-          if ($datastream['id'] === 'RELS-EXT' || count($datastream['mime']) !== 1) {
-            continue;
-          }
-
-          $mime_type = $datastream['mime'][0];
-          if (empty($datastream['optional']) && in_array($mime_type, $supported_mime_types, TRUE)) {
-            $source_datastream_options[$datastream['id']] = $datastream['id'];
-          }
-        }
+  // We are saving the options in form state to avoid subsequent retrieval of
+  // datastreams of ajax callbacks.
+  if (empty($form_state['source_datastream_options'])) {
+    $id = $object->id;
+    $object_datastreams = $object->repository->api->a->listDatastreams($id);
+    $source_datastream_options = [];
+    foreach ($object_datastreams as $dsid => $datastream) {
+      if ($dsid === 'RELS-EXT' || !_cwrc_xslt_datastream_is_supported($datastream)) {
+        continue;
       }
+      $source_datastream_options[$dsid] = $datastream['label'];
     }
+    $form_state['source_datastream_options'] = $source_datastream_options;
   }
+  else {
+    $source_datastream_options = $form_state['source_datastream_options'];
+  }
+
   $form['source_datastream'] = array(
     '#type' => 'select',
     '#title' => t('Source Datastream'),
@@ -172,7 +168,8 @@ function _cwrc_xslt_get_options($datastream_id, &$form_state) {
   $xslt_options = array('' => t('- select -'));
   foreach ($xslts as $xslt) {
     $xslt_cmodel_associations = unserialize($xslt->cmodel_associations);
-    if ($xslt_cmodel_associations && _cwrc_xslt_is_datastream_supported_in_cmodels($xslt_cmodel_associations, $datastream_id)) {
+    $is_supported = $xslt_cmodel_associations ? _cwrc_xslt_is_datastream_supported_in_cmodels($xslt_cmodel_associations, $datastream_id) : FALSE;
+    if ($is_supported) {
       $file = file_load($xslt->fid);
       $xslt_id = $xslt->xslt_id;
       $xslt_options[$xslt_id] = $file->filename;
@@ -189,6 +186,7 @@ function _cwrc_xslt_get_options($datastream_id, &$form_state) {
  */
 function _cwrc_xslt_is_datastream_supported_in_cmodels($cmodels, $datastream_id) {
   $is_supported = FALSE;
+  module_load_include('inc', 'islandora', 'includes/utilities');
   foreach ($cmodels as $cmodel_id => $cmodel_label) {
     if ($is_supported) {
       break;
@@ -204,6 +202,25 @@ function _cwrc_xslt_is_datastream_supported_in_cmodels($cmodels, $datastream_id)
         }
       }
     }
+  }
+
+  return $is_supported;
+}
+
+/**
+ * Checks whether a datastream is supported or not.
+ *
+ * @param array $datastream
+ *   The datastream.
+ *
+ * @return bool
+ *   True when the datastream is supported false otherwise.
+ */
+function _cwrc_xslt_datastream_is_supported(array $datastream) {
+  $is_supported = !empty($datastream['mimetype']);
+  if ($is_supported && is_string($datastream['mimetype'])) {
+    $supported_mime_types = array('text/xml', 'application/xml');
+    $is_supported = in_array($datastream['mimetype'], $supported_mime_types, TRUE);
   }
 
   return $is_supported;
