@@ -15,7 +15,7 @@ function cwrc_xslt_menu() {
     'title' => 'CWRC XSLT',
     'description' => 'XSLT configurations forms.',
     'page callback' => 'system_admin_menu_block_page',
-    'access arguments' => array('administer site configuration'),
+    'access arguments' => array('administer cwrc xslt'),
     'file' => 'system.admin.inc',
     'file path' => drupal_get_path('module', 'system'),
   );
@@ -26,14 +26,14 @@ function cwrc_xslt_menu() {
     'title' => 'XSLT Files',
     'description' => 'Uploaded XSLT files list',
     'page callback' => 'cwrc_xslt_files_list',
-    'access arguments' => array('run batch migration'),
+    'access arguments' => array('administer cwrc xslt'),
     'type' => MENU_NORMAL_ITEM,
   );
   $items['admin/islandora/xslt/files/list'] = array(
     'title' => 'XSLTs',
     'description' => 'Create, manage and edit XSLTs.',
     'page callback' => 'cwrc_xslt_files_list',
-    'access arguments' => array('run batch migration'),
+    'access arguments' => array('administer cwrc xslt'),
     'type' => MENU_DEFAULT_LOCAL_TASK,
     'weight' => 0,
   );
@@ -41,7 +41,7 @@ function cwrc_xslt_menu() {
     'title' => 'Enabled associations',
     'description' => 'List of xslt enabled associations with cModel',
     'page callback' => 'cwrc_xslt_enabled_associations',
-    'access arguments' => array('run batch migration'),
+    'access arguments' => array('administer cwrc xslt'),
     'type' => MENU_LOCAL_TASK,
     'weight' => 1,
   );
@@ -50,7 +50,7 @@ function cwrc_xslt_menu() {
     'description' => 'Upload new XSLT file.',
     'page callback' => 'drupal_get_form',
     'page arguments' => array('cwrc_xslt_upload_form'),
-    'access arguments' => array('run batch migration'),
+    'access arguments' => array('administer cwrc xslt'),
     'file' => $form_file,
     'file path' => $module_path,
     'type' => MENU_LOCAL_TASK,
@@ -62,7 +62,7 @@ function cwrc_xslt_menu() {
     'title arguments' => array(4),
     'page callback' => 'drupal_get_form',
     'page arguments' => array('cwrc_xslt_delete_form', 4),
-    'access arguments' => array('run batch migration'),
+    'access arguments' => array('administer cwrc xslt'),
     'file' => $form_file,
     'file path' => $module_path,
   );
@@ -72,7 +72,7 @@ function cwrc_xslt_menu() {
     'title arguments' => array(4),
     'page callback' => 'drupal_get_form',
     'page arguments' => array('cwrc_xslt_cmodel_association_form', 4),
-    'access arguments' => array('run batch migration'),
+    'access arguments' => array('administer cwrc xslt'),
     'file' => $form_file,
     'file path' => $module_path,
   );
@@ -92,10 +92,21 @@ function cwrc_xslt_menu() {
     'file' => 'includes/datastream.autocomplete.inc',
     'page callback' => 'cwrc_xslt_datastream_autocomplete',
     'page arguments' => array(3),
-    'access arguments' => array('run batch migrations'),
+    'access arguments' => array('administer cwrc xslt'),
   );
 
   return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function cwrc_xslt_permission() {
+  return array(
+    'administer cwrc xslt' => array(
+      'title' => t('Administer cwrc xslts'),
+    ),
+  );
 }
 
 /**
