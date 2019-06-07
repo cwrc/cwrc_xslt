@@ -114,43 +114,48 @@ function cwrc_xslt_object_datastream_form_submit(array $form, array &$form_state
   $xslt_processor = $saxon_processor->newXsltProcessor();
 
   $xdm_node = $saxon_processor->parseXmlFromString($source_xml);
-  $xslt_processor->setSourceFromXdmValue($xdm_node);
-  $xslt_file = drupal_realpath($xslt->file->uri);
-  $xslt_processor->compileFromFile($xslt_file);
-  $output_xml = $xslt_processor->transformToString();
+  if ($xdm_node) {
+    $xslt_processor->setSourceFromXdmValue($xdm_node);
+    $xslt_file = drupal_realpath($xslt->file->uri);
+    $xslt_processor->compileFromFile($xslt_file);
+    $output_xml = $xslt_processor->transformToString();
 
-  $err_count = !$output_xml ? $xslt_processor->getExceptionCount() : 0;
-  if ($err_count > 0) {
-    $message = t('The XSLT transformer has encountered @count error(s):', array('@count' => $err_count)) . '<ol>';
-    for ($i = 0; $i < $err_count; $i++) {
-      $err_code = $xslt_processor->getErrorCode($i);
-      $err_message = $xslt_processor->getErrorMessage($i);
-      $message .= t('<li><b>Error Code:</b> @code<p><b>Error Message</b><br/>@message</p></li>', array(
-        '@code' => $err_code,
-        '@message' => $err_message,
-      ));
-    }
-    $message .= '</ol>';
-    drupal_set_message($message, 'error');
-    $xslt_processor->exceptionClear();
-  }
-  else {
-    $datastream->setContentFromString($output_xml);
-    if (!isset($object[$output_datastream_id])) {
-      // Create the datastream base on the xslt datastream output.
-      $datastream->label = $output_datastream_id;
-      $datastream->mimetype = $xslt->datastream_mime_type;
-      $message = t('The datastream was successfully added!');
+    $err_count = !$output_xml ? $xslt_processor->getExceptionCount() : 0;
+    if ($err_count > 0) {
+      $message = t('The XSLT transformer has encountered @count error(s):', ['@count' => $err_count]) . '<ol>';
+      for ($i = 0; $i < $err_count; $i++) {
+        $err_code = $xslt_processor->getErrorCode($i);
+        $err_message = $xslt_processor->getErrorMessage($i);
+        $message .= t('<li><b>Error Code:</b> @code<p><b>Error Message</b><br/>@message</p></li>', [
+          '@code' => $err_code,
+          '@message' => $err_message,
+        ]);
+      }
+      $message .= '</ol>';
+      drupal_set_message($message, 'error');
+      $xslt_processor->exceptionClear();
     }
     else {
-      $message = t('The datastream was successfully updated!');
+      $datastream->setContentFromString($output_xml);
+      if (!isset($object[$output_datastream_id])) {
+        // Create the datastream base on the xslt datastream output.
+        $datastream->label = $output_datastream_id;
+        $datastream->mimetype = $xslt->datastream_mime_type;
+        $message = t('The datastream was successfully added!');
+      }
+      else {
+        $message = t('The datastream was successfully updated!');
+      }
+      $object->ingestDatastream($datastream);
+      drupal_set_message($message);
+      $form_state['redirect'] = "islandora/object/{$object->id}/manage/datastreams";
     }
-    $object->ingestDatastream($datastream);
-    drupal_set_message($message);
-    $form_state['redirect'] = "islandora/object/{$object->id}/manage/datastreams";
+    $xslt_processor->clearParameters();
+    $xslt_processor->clearProperties();
   }
-  $xslt_processor->clearParameters();
-  $xslt_processor->clearProperties();
+  else {
+    drupal_set_message(t('We were unable to do the transformation please try again later!'), 'error');
+  }
 }
 
 /**
